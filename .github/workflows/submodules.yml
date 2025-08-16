@@ -1,0 +1,56 @@
+name: Update submodules (sdk & hl2sdk-manifests)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Ensure submodule URLs use HTTPS
+        run: |
+          git config -f .gitmodules submodule.sdk.url https://github.com/Source2ZE/sdk.git || true
+          git config -f .gitmodules submodule.hl2sdk-manifests.url https://github.com/Source2ZE/hl2sdk-manifests.git || true
+          git submodule sync --recursive
+
+      - name: Set tracked branches
+        run: |
+          git submodule set-branch --branch cs2 sdk
+          git submodule set-branch --branch main hl2sdk-manifests
+          git submodule sync -- sdk hl2sdk-manifests
+
+      - name: Update submodules to latest on tracked branches
+        run: |
+          git submodule update --init --recursive
+          git submodule update --remote sdk hl2sdk-manifests
+
+      - name: Commit changes (if any)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add sdk hl2sdk-manifests .gitmodules
+            git commit -m "chore(submodules): bump sdk (1.8-stable) & hl2sdk-manifests (main)"
+          else
+            echo "No updates to commit."
+          fi
+
+      - name: Create PR
+        if: ${{ !cancelled() }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/update-submodules
+          title: "chore: update submodules (sdk & hl2sdk-manifests)"
+          commit-message: "chore(submodules): bump sdk & hl2sdk-manifests"
+          body: "Automated update of submodules to the latest commits on their tracked branches."
+          labels: automated
